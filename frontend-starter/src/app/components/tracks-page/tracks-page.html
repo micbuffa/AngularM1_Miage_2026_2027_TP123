@@ -9,8 +9,29 @@
     <article class="card">
       <h2>Importer</h2>
       <label>Titre<input [formControl]="title" /></label>
-      <label>Fichier audio<input type="file" accept="audio/*" (change)="choose($event)" /></label>
-      <button type="button" (click)="upload()" [disabled]="!file">Envoyer</button>
+      <label>Fichier audio
+        <input #fileInput type="file" (change)="choose($event)" [disabled]="uploading()"
+          accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a,.mp3,.wav,.ogg,.m4a" />
+      </label>
+      <small class="hint">MP3, WAV, OGG ou M4A, 25 Mo maximum.</small>
+      @if (file(); as selected) {
+        <small class="hint">{{ selected.name }} · {{ formatSize(selected.size) }}</small>
+      }
+      @if (uploading()) {
+        <div class="progress" role="status">
+          <progress max="100" [attr.value]="uploadPercent()" aria-label="Progression de l’envoi"></progress>
+          <span>{{ uploadPercent() === null ? 'Envoi…' : uploadPercent() === 100 ? 'Traitement par le serveur…' : 'Envoi… ' + uploadPercent() + ' %' }}</span>
+        </div>
+      }
+      @if (uploadError()) {
+        <p class="error" role="alert">{{ uploadError() }}</p>
+      }
+      @if (uploadMessage()) {
+        <p class="success" role="status">{{ uploadMessage() }}</p>
+      }
+      <button type="button" (click)="upload()" [disabled]="!file() || uploading()">
+        {{ uploading() ? 'Envoi…' : 'Envoyer' }}
+      </button>
     </article>
 
     <article class="card">
@@ -21,24 +42,61 @@
       @if (loading()) {
         <p>Chargement…</p>
       }
-      @for (track of tracks(); track track.id) {
-        <div class="track">
-          <div>
-            <b>{{ track.title }}</b>
-            <small>{{ track.originalName }} · {{ track.size }} Ko</small>
-          </div>
-          <button type="button" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">▶</button>
-        </div>
-      } @empty {
-        <p>Aucune piste.</p>
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
       }
+      <ul class="cards" aria-label="Mes pistes">
+        @for (track of tracks(); track track.id) {
+          <li class="track track-card" [class.playing]="currentTrack()?.id === track.id"
+            [attr.aria-current]="currentTrack()?.id === track.id ? 'true' : null">
+            <h3>{{ track.title }}</h3>
+            <p>{{ track.originalName }}</p>
+            <div class="track-meta">
+              <span class="badge">{{ audioFormat(track.mimeType) }}</span>
+              <span>{{ formatSize(track.size) }}</span>
+              <time [attr.datetime]="track.createdAt">{{ formatDate(track.createdAt) }}</time>
+            </div>
+            @if (confirmingId() === track.id) {
+              <div class="confirm" role="group" [attr.aria-label]="'Confirmer la suppression de ' + track.title"
+                (keydown.escape)="cancelDelete()">
+                <span>Supprimer « {{ track.title }} » ?</span>
+                <button type="button" class="danger" (click)="confirmDelete(track)" [disabled]="deletingId() === track.id">
+                  {{ deletingId() === track.id ? 'Suppression…' : 'Oui, supprimer' }}
+                </button>
+                <button type="button" data-cancel-delete (click)="cancelDelete()" [disabled]="deletingId() === track.id">Annuler</button>
+              </div>
+            } @else {
+              <div class="actions">
+                <button type="button" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">▶ Lire</button>
+                <button type="button" class="danger-outline" (click)="askDelete(track)" [disabled]="deletingId() !== null"
+                  [attr.aria-label]="'Supprimer ' + track.title">Supprimer</button>
+              </div>
+            }
+          </li>
+        } @empty {
+          @if (!loading() && !error()) {
+            <li class="empty">Aucune piste.</li>
+          }
+        }
+      </ul>
       <div class="pager">
-        <button type="button" (click)="go(page() - 1)" [disabled]="page() === 1">Préc.</button>
+        <button type="button" (click)="go(page() - 1)" [disabled]="page() === 1 || loading()">Préc.</button>
         <span>Page {{ page() }} / {{ pages() }}</span>
-        <button type="button" (click)="go(page() + 1)" [disabled]="page() === pages()">Suiv.</button>
+        <button type="button" (click)="go(page() + 1)" [disabled]="page() === pages() || loading()">Suiv.</button>
       </div>
-      @if (audioUrl()) {
-        <audio [src]="audioUrl()" controls autoplay></audio>
+      @if (currentTrack(); as current) {
+        <section class="player" aria-label="Lecteur">
+          <p class="now-playing">En cours : <b>{{ current.title }}</b></p>
+          @if (audioLoading()) {
+            <p role="status">Chargement du morceau…</p>
+          }
+          @if (audioError()) {
+            <p class="error" role="alert">{{ audioError() }}</p>
+          }
+          @if (audioUrl()) {
+            <audio [src]="audioUrl()" controls autoplay (error)="onAudioError($event)"></audio>
+          }
+        </section>
       }
     </article>
   </div>
